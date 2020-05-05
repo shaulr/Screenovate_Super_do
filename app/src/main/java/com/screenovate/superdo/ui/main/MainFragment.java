@@ -23,11 +23,12 @@ import com.screenovate.superdo.R;
 import com.screenovate.superdo.data.Bag;
 import com.screenovate.superdo.data.SuperDoModel;
 
+import java.util.Objects;
+
 import okhttp3.OkHttpClient;
 
 public class MainFragment extends Fragment {
 
-    private MainViewModel mViewModel;
     private Button startBtn;
     private Button stopBtn;
     private SuperDoModel mDataModel;
@@ -37,6 +38,7 @@ public class MainFragment extends Fragment {
     public static MainFragment newInstance() {
         return new MainFragment();
     }
+    private final Object insertLock = new Object();
 
     @Nullable
     @Override
@@ -53,14 +55,16 @@ public class MainFragment extends Fragment {
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        mViewModel = ViewModelProviders.of(this).get(MainViewModel.class);
         mDataModel = new SuperDoModel(getContext(), new BagListener() {
             @Override
             public void onNewBag(final Bag bag) {
-                getActivity().runOnUiThread(new Runnable() {
+                Objects.requireNonNull(getActivity()).runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        mAdapter.addBag(bag);
+                        synchronized (insertLock) {
+                            if(mAdapter != null)
+                                mAdapter.addBag(bag);
+                        }
                     }
                 });
             }
@@ -69,14 +73,14 @@ public class MainFragment extends Fragment {
 
             @Override
             public boolean areItemsTheSame(@NonNull Bag oldItem, @NonNull Bag newItem) {
-                return  oldItem.getBagColor() == newItem.getBagColor() &&
-                        oldItem.getName() == newItem.getName() &&
-                        oldItem.getWeight() == newItem.getWeight();
+                return  oldItem.getBagColor().equals(newItem.getBagColor()) &&
+                        oldItem.getName().equals(newItem.getName()) &&
+                        oldItem.getWeight().equals(newItem.getWeight());
             }
 
             @Override
             public boolean areContentsTheSame(@NonNull Bag oldItem, @NonNull Bag newItem) {
-                return  oldItem.getBagColor() == newItem.getBagColor() &&
+                return  oldItem.getBagColor().equals(newItem.getBagColor()) &&
                         oldItem.getName().equals(newItem.getName()) &&
                         oldItem.getWeight().equals(newItem.getWeight());
             }
@@ -109,9 +113,9 @@ public class MainFragment extends Fragment {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if(s.length() == 0)
-                    return;
-                mAdapter.getFilter().filter(s.toString());
+                synchronized (insertLock) {
+                    mAdapter.getFilter().filter(s.toString());
+                }
             }
 
             @Override

@@ -2,7 +2,6 @@ package com.screenovate.superdo.data;
 import android.util.Log;
 
 import com.screenovate.superdo.ui.main.BagListener;
-import com.screenovate.superdo.ui.main.MainViewModel;
 import com.squareup.moshi.JsonAdapter;
 import com.squareup.moshi.Moshi;
 
@@ -11,8 +10,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
@@ -20,17 +17,20 @@ import okio.ByteString;
 
 public class SuperDoWebSocketListener extends WebSocketListener {
     private final static String TAG = SuperDoWebSocketListener.class.getSimpleName();
-    Moshi moshi;
-    JsonAdapter<Bag> jsonAdapter;
-    MainViewModel mMainViewModel;
-    BagListener listener;
+    private Moshi moshi;
+    private JsonAdapter<Bag> jsonAdapter;
+    private BagListener listener;
+    private boolean running = true;
 
-    public SuperDoWebSocketListener(BagListener listener) {
+    SuperDoWebSocketListener(BagListener listener) {
         this.listener = listener;
     }
-
+    void stop() {
+        running = false;
+    }
     @Override
     public void onMessage(@NotNull WebSocket webSocket, @NotNull String text) {
+        if(!running) return;
         Log.i(TAG, text);
         try {
             Bag bag = jsonAdapter.fromJson(text);
@@ -41,12 +41,12 @@ public class SuperDoWebSocketListener extends WebSocketListener {
     }
 
     @Override
-    public void onMessage(WebSocket webSocket, ByteString bytes) {
+    public void onMessage(@NotNull WebSocket webSocket, ByteString bytes) {
         Log.i(TAG, bytes.toString());
 
     }
     @Override
-    public void onOpen(WebSocket webSocket, Response response) {
+    public void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
         moshi = new Moshi.Builder()
                     .build();
         jsonAdapter = moshi.adapter(Bag.class);
@@ -59,6 +59,6 @@ public class SuperDoWebSocketListener extends WebSocketListener {
 
     @Override
     public void onFailure(@NotNull WebSocket webSocket, @NotNull Throwable t, @Nullable Response response) {
-        Log.e(TAG, t.getMessage());
+        Log.e(TAG, Log.getStackTraceString(t));
     }
 }

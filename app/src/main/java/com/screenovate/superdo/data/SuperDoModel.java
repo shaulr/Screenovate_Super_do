@@ -4,7 +4,6 @@ import android.content.Context;
 
 import com.screenovate.superdo.R;
 import com.screenovate.superdo.ui.main.BagListener;
-import com.screenovate.superdo.ui.main.MainViewModel;
 
 import java.lang.ref.WeakReference;
 
@@ -16,11 +15,13 @@ public class SuperDoModel {
     private WeakReference<Context> savedContext;
     private OkHttpClient client;
     private String url;
-    WebSocket websocket;
-    BagListener listener;
+    private WebSocket websocket;
+    private BagListener listener;
+    private SuperDoWebSocketListener socketListener;
+    private boolean connected = false;
     public SuperDoModel(Context context, BagListener listener) {
         if(context != null) {
-            savedContext = new WeakReference<Context>(context);
+            savedContext = new WeakReference<>(context);
         }
         this.listener = listener;
     }
@@ -30,14 +31,20 @@ public class SuperDoModel {
             initializeWebsocketClient();
         }
         Request request = new Request.Builder().url(url).build();
-        SuperDoWebSocketListener socketListener = new SuperDoWebSocketListener(listener);
+        socketListener = new SuperDoWebSocketListener(listener);
         websocket = client.newWebSocket(request, socketListener);
+        connected = true;
     }
 
     public void stopLoading() {
-        websocket.close(1000,"Normal close");
-        client.dispatcher().executorService().shutdown();
-        client.connectionPool().evictAll();
+        if(websocket != null && client != null) {
+            websocket.close(1000, "Normal close");
+            client.dispatcher().executorService().shutdown();
+            client.connectionPool().evictAll();
+            socketListener.stop();
+        }
+        client = null;
+        websocket = null;
     }
 
     private void initializeWebsocketClient() {

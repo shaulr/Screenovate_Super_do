@@ -2,6 +2,7 @@ package com.screenovate.superdo.ui.main;
 
 import android.graphics.Color;
 
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,22 +16,27 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.screenovate.superdo.R;
 import com.screenovate.superdo.data.Bag;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class BagAdapter extends ListAdapter<Bag, BagViewHolder> {
-    List<Bag> mOrigList = new ArrayList<>();
-    List<Bag> mFilteredList = new ArrayList<>();
-
+    private final static String TAG = BagAdapter.class.getSimpleName();
+    private List<Bag> items = new ArrayList<>();
+    private List<Bag> filteredItems = new ArrayList<>();
+    private CountDownLatch filterLock = new CountDownLatch(0);
     private BagFilter filter;
     private RecyclerView mRecyclerView;
 
-    protected BagAdapter(@NonNull DiffUtil.ItemCallback<Bag> diffCallback) {
+    BagAdapter(@NonNull DiffUtil.ItemCallback<Bag> diffCallback) {
         super(diffCallback);
         filter = new BagFilter(this);
     }
-    public BagFilter getFilter() {
+    BagFilter getFilter() {
         return filter;
     }
 
@@ -42,7 +48,7 @@ public class BagAdapter extends ListAdapter<Bag, BagViewHolder> {
         return new BagViewHolder(itemView);
     }
     @Override
-    public void onAttachedToRecyclerView(RecyclerView recyclerView) {
+    public void onAttachedToRecyclerView(@NotNull RecyclerView recyclerView) {
         super.onAttachedToRecyclerView(recyclerView);
 
         mRecyclerView = recyclerView;
@@ -56,18 +62,37 @@ public class BagAdapter extends ListAdapter<Bag, BagViewHolder> {
         holder.weight.setText(bag.getWeight());
     }
 
-    public void addBag(Bag bag) {
-        mOrigList.add(bag);
-        getFilter().filter(filter.filterString);
+    void addBag(Bag bag) {
+        if((getFilter().filterString.length() > 0 &&
+                bag.getWeight().startsWith(getFilter().filterString) )) {
+            try {
+                filterLock.await();
+            } catch (InterruptedException e) {
+                Log.e(TAG, Log.getStackTraceString(e));
+            }
+            filteredItems.add(bag);
+            submitList(filteredItems);
+            notifyItemInserted(filteredItems.size() - 1);
+            mRecyclerView.scrollToPosition(filteredItems.size() - 1);
+            items.add(bag);
+            filterLock.countDown();
+            return;
+        }
+
+        items.add(bag);
+        if(getFilter().filterString.length() == 0) {
+            submitList(items);
+            notifyItemInserted(items.size() - 1);
+            mRecyclerView.scrollToPosition(items.size() - 1);
+        }
     }
 
 
     public class BagFilter extends Filter {
 
         private BagAdapter adapter;
-        public boolean isFiltering = false;
-        public String filterString = "";
-        public BagFilter(BagAdapter adapter) {
+        String filterString = "";
+        BagFilter(BagAdapter adapter) {
             this.adapter = adapter;
         }
 
@@ -75,25 +100,23 @@ public class BagAdapter extends ListAdapter<Bag, BagViewHolder> {
         @Override
         protected FilterResults performFiltering(CharSequence constraint) {
             FilterResults results = new FilterResults();
-
-            if(constraint.length() == 0) {
-                results.values = mOrigList;
-                results.count = mOrigList.size();
-                return results;
-            }
-            isFiltering = true;
             filterString = constraint.toString();
 
-            final List<Bag> list = getCurrentList();
+            if(constraint.length() == 0) {
+                results.values = items;
+                results.count = items.size();
+                return results;
+            }
 
-            int count = list.size();
-            List<Bag> tempFiltered = new ArrayList<Bag>(count);
+            filterLock = new CountDownLatch(1);
+            int count = items.size();
+            List<Bag> tempFiltered = new ArrayList<>(count);
 
             Bag filterableString;
 
             for (int i = 0; i < count; i++) {
-                if (list.get(i).getWeight().startsWith(filterString)) {
-                    tempFiltered.add(list.get(i));
+                if (items.get(i).getWeight().startsWith(filterString)) {
+                    tempFiltered.add(items.get(i));
                 }
             }
 
@@ -106,11 +129,20 @@ public class BagAdapter extends ListAdapter<Bag, BagViewHolder> {
         @SuppressWarnings("unchecked")
         @Override
         protected void publishResults(CharSequence constraint, FilterResults results) {
-            List<Bag> currentList = (List<Bag>) results.values;
-            adapter.submitList(currentList);
-            adapter.notifyItemInserted(currentList.size() - 1);
-            mRecyclerView.scrollToPosition(currentList.size() - 1);
-            mFilteredList.add(currentList.get(currentList.size() - 1));
+            if(filterString.length() > 0) {
+                filteredItems.clear();
+                filteredItems.addAll((List<Bag>) results.values);
+                adapter.submitList(filteredItems);
+                mRecyclerView.setAdapter(adapter);
+                adapter.notifyDataSetChanged();
+            } else {
+                adapter.submitList(items);
+                mRecyclerView.setAdapter(adapter);
+                adapter.notifyDataSetChanged();
+
+            }
+            filterLock.countDown();
+
         }
 
     }
