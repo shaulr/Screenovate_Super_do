@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Screenovate Super do</string>
+    <string name="url">ws://superdo-groceries.herokuapp.com/receive</string>
+    <string name="title">Incoming Item Feed</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+</resources>
